@@ -148,3 +148,101 @@ python study.py bars.json
 optionally `stocks` for names. Free sources that work without a key: Sina
 `vip.stock.finance.sina.com.cn` market-center endpoints for snapshots, Tencent
 `web.ifzq.gtimg.cn/appstock/app/fqkline/get` for daily K-lines.
+
+---
+
+## Follow-up (Sep 2026): a 3,145-stock breadth gauge — and two measurement bugs that flipped every conclusion
+
+The study above used 584 names and four months. This follow-up scales it to **3,145
+Shanghai/Shenzhen main-board stocks, 622 trading days (2024-01-26 → 2026-09-18), 904,775
+pattern-labelled stock-days**, all from the free Tencent daily endpoint. Same rules, same
+honesty requirement. It also found two ways the bigger sample can lie to you.
+
+Artifacts: `breadth_gauge.py` (builds everything), `breadth_gauge.json` (the daily gauge),
+`breadth_stats.json` (every number below).
+
+### 1. The breadth gauge
+
+Per day: share of the universe trading above its own 20-day moving average, share of stocks
+up on the day, and the equal-weight return (the day's average stock move).
+
+Latest print in the sample: **2026-09-18 — 32.63% above MA20, 28.3rd percentile of 622 days.**
+
+Using it as a timing signal on the equal-weight universe (next 5 trading days):
+
+```
+breadth bucket   days   next-5d equal-weight   t      up-days
+<20%               68            +0.80%      +2.22     63.2%
+20-40%            163            -0.50%      -1.87     46.6%
+40-60%            160            +0.93%      +3.51     60.6%
+60-80%            143            +0.36%      +1.86     58.7%
+>80%               83            +0.97%      +2.03     59.0%
+```
+
+Both tails are positive; the dead zone is 20-40%, which is where the market sat when this
+was written. Year split (2024/2025/2026) keeps the sign of the 40-60% bucket in all three
+years (+1.1 / +1.1 / +0.5) but the tails move around — treat the middle as the information.
+
+### 2. Bug one — a ragged panel invents market days
+
+Concatenating per-stock files gives 6,487 distinct dates, of which **5,870 are phantom
+"days" where one or two stale files traded** (median 4 rows). Averaging over them changed
+the answers:
+
+```
+pattern              clustered (622 real days)   over all dates incl. phantom
+Uptrend              +0.191%  t=+1.47            +0.526%  t=+5.66
+LowVolPullback       +0.317%  t=+2.29            +0.546%  t=+5.48
+Sideways             +0.322%  t=+3.11            +0.020%  t=+0.28
+```
+
+Guard: require the day to have ≥500 stocks with a defined 20-day MA before it counts.
+
+### 3. Bug two — date clustering inflates everything
+
+Stock-days inside one session are not independent. "Oversold rebound" days above 60%
+breadth showed a **row-level mean of +11.35%** at a 67.8% win rate. The same data, one
+observation per day, is **+0.65%** (98 days). Two sessions carried it — 2026-07-31
+(222 names, +14.25% average) and 2026-08-04 (34 names). Every statistic below is a mean of
+per-day means; t uses the number of days.
+
+### 4. What survives (mean of per-day means, forward 5 trading days)
+
+```
+pattern                days     rows      fwd5     t      row-level mean (naive)
+OversoldRebound         462    5,934    +0.033%  +0.10    +1.547%   (47x inflation)
+LowVolPullback          615  231,310    +0.317%  +2.29    +0.526%
+Uptrend                 617  401,002    +0.191%  +1.47    +0.362%
+Sideways                603  175,338    +0.322%  +3.11    +0.425%
+Breakout+Volume         617   59,352    -0.432%  -2.84    -0.289%
+HighLevelVolumeDrop     608    7,151    -1.557%  -6.30    -1.152%
+```
+
+Then subtract the same-day equal-weight universe return from every row — the beta test:
+
+```
+pattern                 excess fwd5     t
+HighLevelVolumeDrop       -1.958%     -9.84
+Breakout+Volume           -0.843%     -8.54
+Uptrend                   -0.220%     -3.95
+LowVolPullback            -0.117%     -2.18
+OversoldRebound           -0.361%     -1.39
+Sideways                  -0.065%     -0.94
+```
+
+**No bullish pattern beat the equal-weight universe.** Everything positive in the raw table
+was market beta — including the "buy the uptrend" and "buy the pullback" rules. The only
+statistically solid, regime-stable signals in this dataset are the two *avoidance* ones: a
+high-level drop on heavy volume (−1.96%), and chasing a volume breakout (−0.84%).
+
+### Caveats (still apply)
+
+Main-board only (no ChiNext/STAR/BSE), 2024-2026 sample, no costs, no T+1 fill modelling,
+overlapping 5-day windows (t-stats are optimistic, not conservative), and dozens of
+signal × regime cells were inspected — at that count some t≈2 values are noise.
+
+### Run it
+
+```bash
+python breadth_gauge.py path/to/history_ext   # one JSON per stock: [{date,open,high,low,close,volume}, ...]
+```
