@@ -246,3 +246,77 @@ signal × regime cells were inspected — at that count some t≈2 values are no
 ```bash
 python breadth_gauge.py path/to/history_ext   # one JSON per stock: [{date,open,high,low,close,volume}, ...]
 ```
+
+---
+
+# Sequel: gap-ups, and why "volume confirms" is backwards
+
+`gap_study.py` — **1.91M main-board stock-days, 3,116 stocks, 641 adjusted daily bars
+through 2026-10-22**. Same free-data spirit: no keys, no vendor, no strategy claims.
+
+The question: when a stock opens with a gap, does the gap follow through — and does the
+*volume* on that gap tell you anything?
+
+```bash
+python gap_study.py path/to/history_ext      # one JSON per stock, adjusted (qfq) bars
+```
+
+## Gap size alone
+
+| gap bucket | n | next-day mean | next-day median | next-day win | fwd5 mean | fwd5 median | fwd5 win |
+|---|---|---|---|---|---|---|---|
+| +2~3% | 29,691 | +0.49% | +0.19% | 52.0% | +0.36% | -0.45% | 46.6% |
+| +3~5% | 19,332 | +0.81% | +0.47% | 54.1% | +0.32% | -0.92% | 44.7% |
+| +5~9% | 9,480 | +0.91% | +0.47% | 53.1% | +0.91% | -1.45% | 43.6% |
+| **≥9% (limit-up gap)** | 9,310 | **-0.34%** | **-1.76%** | 45.4% | -0.90% | **-6.44%** | **32.8%** |
+| baseline (all stock-days) | 1,905,994 | +0.07% | 0.00% | 48.0% | +0.36% | -0.13% | 48.2% |
+
+Opening at the board limit is the *worst* bucket, not the best: two out of three lose over
+five days, median -6.4%.
+
+## Gap × volume ratio (volume / 20-day average)
+
+Holding gap size fixed, a **below-average-volume gap** beats a **3x-volume gap** in every
+bucket. Highest-priority cell:
+
+| cell | n | next-day mean | next-day median | next-day win | fwd5 mean | fwd5 median | fwd5 win |
+|---|---|---|---|---|---|---|---|
+| +5~9% gap, vr<1 | 1,431 | +2.88% | +3.22% | 67.6% | +8.09% | +3.20% | 62.0% |
+| +5~9% gap, vr 1-2 | 2,637 | +0.87% | +0.39% | 52.9% | +1.31% | -0.44% | 47.6% |
+| +5~9% gap, vr 2-3 | 1,898 | +0.81% | +0.34% | 51.8% | -0.20% | -1.78% | 41.5% |
+| +5~9% gap, vr>3 | 3,514 | +0.20% | -0.25% | 48.0% | **-1.71%** | **-3.32%** | **34.2%** |
+| +3~5% gap, vr<1 | 3,812 | +1.07% | +0.80% | 59.4% | +2.39% | +0.91% | 54.9% |
+| +3~5% gap, vr>3 | 4,575 | +0.90% | +0.75% | 54.8% | **-1.52%** | **-2.88%** | **34.3%** |
+
+## Fat-tail audit (5-day forward)
+
+| cell | n | mean | median | p25 | p75 | share of total P&L from best 5% |
+|---|---|---|---|---|---|---|
+| +5~9% gap, vr<1 | 1,424 | +8.09% | +3.20% | -4.79% | +15.22% | 54.2% |
+| +5~9% gap, vr>3 | 3,497 | -1.71% | -3.32% | -8.42% | +2.53% | -104.1% |
+
+The low-volume cell's mean is not a typical trade — the median (+3.2%) is. Over half the sum
+comes from the best 5% of cases.
+
+## Gap-downs
+
+| gap | n | next-day mean | next-day median | next-day win |
+|---|---|---|---|---|
+| -3~-2% | 34,113 | +0.06% | 0.00% | 49.8% |
+| -5~-3% | 21,717 | -0.20% | -0.27% | 46.6% |
+| ≤-5% | 11,266 | **-1.82%** | **-1.94%** | **36.0%** |
+
+Small gap-downs are indistinguishable from noise; large ones keep bleeding. No bounce edge.
+
+## Latest session in the sample (2026-10-22)
+
+57 of 3,116 stocks gapped ≥+2%: **70.2% closed below their open, 66.7% filled the gap the
+same day.** Nine opened at/above +9.9%; seven of those held the limit, while 新亚制程 opened
++10.00% and closed -10.00% (-18.2% from open), and 九牧王 opened +9.38% and closed -6.35%.
+
+## Caveats
+
+Main-board only (no ChiNext/STAR/BSE), ST and delisting names dropped, adjusted (qfq) prices,
+no transaction costs, no T+1 fill modelling, overlapping forward windows (so no t-stats are
+quoted — the sample is large, not independent), and the window drifts positive
+(baseline next-day +0.07%, fwd5 +0.36%). This is a measurement of what happened, not advice.
